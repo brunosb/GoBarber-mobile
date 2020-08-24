@@ -12,6 +12,7 @@ import { useNavigation } from '@react-navigation/native';
 import { FormHandles } from '@unform/core';
 import { Form } from '@unform/mobile';
 import * as Yup from 'yup';
+import ImagePicker from 'react-native-image-picker';
 import api from '../../services/api';
 
 import Input from '../../components/Input';
@@ -48,73 +49,113 @@ const SignIn: React.FC = () => {
   const passwordInputRef = useRef<TextInput>(null);
   const confirmPasswordInputRef = useRef<TextInput>(null);
 
-  const handleSignUp = useCallback(async (data: ProfileFormData) => {
-    try {
-      formRef.current?.setErrors({});
+  const handleUpdateProfile = useCallback(
+    async (data: ProfileFormData) => {
+      try {
+        formRef.current?.setErrors({});
 
-      const schema = Yup.object().shape({
-        name: Yup.string().required('Nome obrigatório'),
-        email: Yup.string()
-          .required('E-mail obrigatório')
-          .email('Digite um e-mail válido'),
-        old_password: Yup.string(),
-        password: Yup.string().when('old_password', {
-          is: (val) => !!val.length,
-          then: Yup.string().required('Campo Obrigatório'),
-          otherwise: Yup.string(),
-        }),
-        password_confirmation: Yup.string()
-          .when('old_password', {
+        const schema = Yup.object().shape({
+          name: Yup.string().required('Nome obrigatório'),
+          email: Yup.string()
+            .required('E-mail obrigatório')
+            .email('Digite um e-mail válido'),
+          old_password: Yup.string(),
+          password: Yup.string().when('old_password', {
             is: (val) => !!val.length,
             then: Yup.string().required('Campo Obrigatório'),
             otherwise: Yup.string(),
-          })
-          .oneOf([Yup.ref('password'), null], 'Confirmação incorreta'),
-      });
+          }),
+          password_confirmation: Yup.string()
+            .when('old_password', {
+              is: (val) => !!val.length,
+              then: Yup.string().required('Campo Obrigatório'),
+              otherwise: Yup.string(),
+            })
+            .oneOf([Yup.ref('password'), null], 'Confirmação incorreta'),
+        });
 
-      await schema.validate(data, {
-        abortEarly: false,
-      });
+        await schema.validate(data, {
+          abortEarly: false,
+        });
 
-      const {
-        name,
-        email,
-        old_password,
-        password,
-        password_confirmation,
-      } = data;
+        const {
+          name,
+          email,
+          old_password,
+          password,
+          password_confirmation,
+        } = data;
 
-      const formData = {
-        name,
-        email,
-        ...(old_password
-          ? {
-              old_password,
-              password,
-              password_confirmation,
-            }
-          : {}),
-      };
+        const formData = {
+          name,
+          email,
+          ...(old_password
+            ? {
+                old_password,
+                password,
+                password_confirmation,
+              }
+            : {}),
+        };
 
-      const response = await api.put('/profile', formData);
-      updateUser(response.data);
+        const response = await api.put('/profile', formData);
+        updateUser(response.data);
 
-      Alert.alert('Perfil atualizado com sucesso!');
+        Alert.alert('Perfil atualizado com sucesso!');
 
-      navigation.goBack();
-    } catch (err) {
-      if (err instanceof Yup.ValidationError) {
-        const errors = getValidationErrors(err);
-        formRef.current?.setErrors(errors);
-        return;
+        navigation.goBack();
+      } catch (err) {
+        if (err instanceof Yup.ValidationError) {
+          const errors = getValidationErrors(err);
+          formRef.current?.setErrors(errors);
+          return;
+        }
+
+        Alert.alert(
+          'Erro na atualização do perfil',
+          `Ocorreu um erro ao atualizar seu perfil, tente novamente. Error: ${err.message}`,
+        );
       }
+    },
+    [navigation, updateUser],
+  );
 
-      Alert.alert(
-        'Erro na atualização do perfil',
-        `Ocorreu um erro ao atualizar seu perfil, tente novamente. Error: ${err.message}`,
-      );
-    }
-  }, []);
+  const handleUpdateAvatar = useCallback(() => {
+    ImagePicker.showImagePicker(
+      {
+        title: 'Selecione um avatar',
+        cancelButtonTitle: 'Cancelar',
+        takePhotoButtonTitle: 'Usar câmera',
+        chooseFromLibraryButtonTitle: 'Escolhe da galeria',
+      },
+      (response) => {
+        if (response.didCancel) {
+          return;
+        }
+        if (response.error) {
+          Alert.alert('Erro ao atualizar seu avatar.');
+          return;
+        }
+
+        const data = new FormData();
+
+        data.append('avatar', {
+          type: 'image/jpeg',
+          name: `${user.id}.jpg`,
+          uri: response.uri,
+        });
+
+        api
+          .patch('/users/avatar', data)
+          .then((apiResponse) => {
+            updateUser(apiResponse.data);
+          })
+          .catch((err) => {
+            Alert.alert(`Error: ${err}`);
+          });
+      },
+    );
+  }, [updateUser, user.id]);
 
   const handleGoBack = useCallback(() => {
     navigation.goBack();
@@ -137,7 +178,7 @@ const SignIn: React.FC = () => {
                 <Icon name="chevron-left" size={24} color="#999591" />
               </BackButton>
 
-              <UserAvatarButton onPress={() => {}}>
+              <UserAvatarButton onPress={handleUpdateAvatar}>
                 <UserAvatar source={{ uri: user.avatar_url }} />
               </UserAvatarButton>
 
@@ -145,7 +186,11 @@ const SignIn: React.FC = () => {
                 <Title>Meu Perfil</Title>
               </View>
 
-              <Form initialData={user} ref={formRef} onSubmit={handleSignUp}>
+              <Form
+                initialData={user}
+                ref={formRef}
+                onSubmit={handleUpdateProfile}
+              >
                 <Input
                   autoCapitalize="words"
                   name="name"
