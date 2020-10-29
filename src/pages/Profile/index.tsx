@@ -19,7 +19,6 @@ import Input from '../../components/Input';
 import Button from '../../components/Button';
 import getValidationErrors from '../../utils/getValidationErrors';
 
-import logoImg from '../../assets/logo.png';
 import {
   Container,
   Content,
